@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import
-  {
-    FileText,
-    Sparkles,
-    Copy,
-    Check,
-    Settings,
-    AlertTriangle,
-    Trash2,
-    Clock,
-    TrendingDown,
-    Sliders,
-    Cpu,
-    ExternalLink,
-    BookOpen
-  } from 'lucide-react';
+{
+  FileText,
+  Sparkles,
+  Copy,
+  Check,
+  Settings,
+  AlertTriangle,
+  Trash2,
+  Clock,
+  TrendingDown,
+  Sliders,
+  Cpu,
+  ExternalLink,
+  BookOpen
+} from 'lucide-react';
 
 const EXAMPLES = [
   {
@@ -30,6 +30,8 @@ const EXAMPLES = [
     text: "Photosynthesis is a biological process used by plants, algae, and certain bacteria to convert light energy into chemical energy. This chemical energy is stored in organic compounds, such as sugars, which can later be released to fuel the organisms' metabolic activities. The process is crucial for life on Earth as it is the primary source of oxygen in the atmosphere and forms the base of most food chains. Photosynthesis generally takes place in cell organelles called chloroplasts, which contain pigment molecules called chlorophyll. During the light-dependent reactions, chlorophyll absorbs solar radiation, which is used to split water molecules, generating oxygen gas and chemical energy carriers. In the light-independent reactions (the Calvin cycle), these energy carriers are used to fix carbon dioxide from the air into glucose, providing nourishment for the plant."
   }
 ];
+
+const BASE_URL = "https://intrainmode-briefly-ai-api.hf.space";
 
 function App ()
 {
@@ -57,7 +59,7 @@ function App ()
     {
       try
       {
-        const response = await fetch( "http://localhost:8000/api/health" );
+        const response = await fetch( `${ BASE_URL }/api/health` );
         if ( response.ok )
         {
           const data = await response.json();
@@ -105,7 +107,7 @@ function App ()
 
     try
     {
-      const response = await fetch( "http://localhost:8000/api/summarize", {
+      const response = await fetch( `${ BASE_URL }/api/summarize`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -172,7 +174,7 @@ function App ()
 
     try
     {
-      const response = await fetch( "http://localhost:8000/api/summarize-detailed", {
+      const response = await fetch( `${ BASE_URL }/api/summarize-detailed`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -483,7 +485,7 @@ function App ()
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
                     {summaryResult.entities_found.length > 0 ? (
-                      summaryResult.entities_found.map((ent, idx) => (
+                      summaryResult.entities_found.map( ( ent, idx ) => (
                         <span key={idx} className="concept-tag" style={{
                           padding: '0.35rem 0.75rem',
                           borderRadius: '8px',
@@ -495,7 +497,7 @@ function App ()
                         }}>
                           🔍 {ent}
                         </span>
-                      ))
+                      ) )
                     ) : (
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No major entities discovered.</span>
                     )}
@@ -508,7 +510,7 @@ function App ()
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                     {summaryResult.keywords.length > 0 ? (
-                      summaryResult.keywords.map((kw, idx) => (
+                      summaryResult.keywords.map( ( kw, idx ) => (
                         <span key={idx} className="concept-tag" style={{
                           padding: '0.35rem 0.75rem',
                           borderRadius: '8px',
@@ -520,7 +522,7 @@ function App ()
                         }}>
                           # {kw}
                         </span>
-                      ))
+                      ) )
                     ) : (
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No high-impact keyphrases extracted.</span>
                     )}
