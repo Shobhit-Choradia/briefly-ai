@@ -152,7 +152,7 @@ function App ()
 
     setTimeout( () =>
     {
-      setLoadingStep( "Analyzing text emotion and core sentiment..." );
+      setLoadingStep( "Analyzing text tone and core style..." );
     }, 800 );
 
     setTimeout( () =>
@@ -448,13 +448,13 @@ function App ()
               {/* Advanced NLP Deep Analysis Cards */}
               {summaryResult.entities_found && (
                 <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1.5rem' }}>
-                  {/* Emotion Analysis Gauge */}
+                  {/* Tone Analysis Gauge */}
                   <div className="section-title" style={{ fontSize: '1.1rem', marginBottom: '0.8rem' }}>
                     <Sparkles size={18} style={{ color: '#f472b6' }} />
-                    <h3>Emotional Tone Analysis</h3>
+                    <h3>Text Tone Analysis</h3>
                   </div>
                   <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-                    <span className="emotion-badge" style={{
+                    <span className="tone-badge" style={{
                       padding: '0.4rem 1rem',
                       borderRadius: '20px',
                       fontSize: '0.85rem',
@@ -469,10 +469,10 @@ function App ()
                       gap: '6px',
                       boxShadow: '0 0 15px rgba(236, 72, 153, 0.1)'
                     }}>
-                      🎭 Dominant Tone: {summaryResult.emotion}
+                      🎭 Dominant Tone: {summaryResult.tone}
                     </span>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      Engine: {summaryResult.emotion_model_used}
+                      Engine: {summaryResult.tone_model_used}
                     </span>
                   </div>
 

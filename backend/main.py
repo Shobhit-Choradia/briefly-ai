@@ -14,23 +14,36 @@ logger = logging.getLogger("summarizer-backend")
 # Global pipeline reference
 text_summarizer = None
 text_ner = None
-text_emotion = None
+text_tone = None
 text_keywords = None
 
 SUMMARIZATION_MODEL_NAME = "sshleifer/distilbart-cnn-6-6"
 NER_MODEL_NAME = "elastic/distilbert-base-uncased-finetuned-conll03-english"
-EMOTION_MODEL_NAME = "bhadresh-savani/distilbert-base-uncased-emotion"
+TONE_MODEL_NAME = "tasksource/ModernBERT-base-nli"
 KEYWORDS_MODEL_NAME = "ml6team/keyphrase-extraction-distilbert-inspec"
+
+candidate_tones = [
+    "informational / instructional",  # 1. Facts, guides, or tutorials
+    "talk / conversational",          # 2. Casual speech, texting, or chatting
+    "promotional / marketing",        # 3. Sales pitches, ads, or persuasion
+    "academic / scholarly",           # 4. Research, formal studies, or dense theory
+    "narrative / storytelling",       # 5. Fiction, anecdotes, or describing events
+    "opinion / editorial",            # 6. Personal viewpoints, commentary, or reviews
+    "professional / corporate",       # 7. Business emails, updates, or reports
+    "urgent / critical",              # 8. Alerts, warnings, or time-sensitive news
+    "creative / poetic",              # 9. Expressive, artistic, or stylistic text
+    "legal / administrative"          # 10. Terms of service, contracts, or official rules
+]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global text_summarizer, text_ner, text_emotion, text_keywords
+    global text_summarizer, text_ner, text_tone, text_keywords
     logger.info("Initializing NLP models...")
     start_time = time.time()
     try:
         text_summarizer = pipeline("summarization", model=SUMMARIZATION_MODEL_NAME, framework="pt")
         text_ner = pipeline("ner", model=NER_MODEL_NAME, framework="pt", aggregation_strategy="simple")
-        text_emotion = pipeline("text-classification", model=EMOTION_MODEL_NAME, framework="pt")
+        text_tone = pipeline("zero-shot-classification", model=TONE_MODEL_NAME, framework="pt")
         text_keywords = pipeline("token-classification", model=KEYWORDS_MODEL_NAME, framework="pt", aggregation_strategy="simple")
         
         duration = time.time() - start_time
@@ -43,7 +56,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Enhanced Text Analysis API",
-    description="FastAPI text engine featuring Summarization, NER, Emotion Analysis, and Keyphrase Extraction.",
+    description="FastAPI text engine featuring Summarization, NER, Tone Analysis, and Keyphrase Extraction.",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -76,10 +89,10 @@ class SummarizeResponse(BaseModel):
 
 class SummarizeResponseDetailed(SummarizeResponse):
     entities_found: List[str]
-    emotion: str
+    tone: str
     keywords: List[str]
     ner_model_used: str
-    emotion_model_used: str
+    tone_model_used: str
     keywords_model_used: str
 
 # --- HELPER PARSING FUNCTIONS ---
@@ -93,13 +106,13 @@ def extract_entities(text: str) -> List[str]:
         logger.warning(f"NER extraction failed: {str(e)}")
         return []
 
-def analyze_emotion(text: str) -> str:
-    """Extracts dominant emotion label."""
+def analyze_tone(text: str) -> str:
+    """Extracts dominant tone label."""
     try:
-        raw_emotions = text_emotion(text)
-        return raw_emotions[0]['label'] if raw_emotions else "unknown"
+        raw_tones = text_tone(text, candidate_labels=candidate_tones)
+        return raw_tones['labels'][0] if raw_tones and 'labels' in raw_tones else "unknown"
     except Exception as e:
-        logger.warning(f"Emotion analysis failed: {str(e)}")
+        logger.warning(f"Tone analysis failed: {str(e)}")
         return "unknown"
 
 def extract_keywords(text: str) -> List[str]:
@@ -189,16 +202,16 @@ async def summarize_text_detailed(request: SummarizeRequest):
     base_result = await summarize_text(request)
     
     extracted_entities = extract_entities(request.text)
-    emotion = analyze_emotion(request.text)
+    tone = analyze_tone(request.text)
     extracted_keywords = extract_keywords(request.text)
     
     return SummarizeResponseDetailed(
         **base_result.model_dump(),
         entities_found=extracted_entities,
-        emotion=emotion,
+        tone=tone,
         keywords=extracted_keywords,
         ner_model_used=NER_MODEL_NAME,
-        emotion_model_used=EMOTION_MODEL_NAME,
+        tone_model_used=TONE_MODEL_NAME,
         keywords_model_used=KEYWORDS_MODEL_NAME
     )
 
