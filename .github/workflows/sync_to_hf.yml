@@ -1,0 +1,40 @@
+name: Sync to Hugging Face Spaces
+
+on:
+  push:
+    branches: [main]
+
+  workflow_dispatch:
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage and Push Backend Subdirectory to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # 1. Enter the backend folder where Dockerfile is located
+          cd backend
+          
+          # 2. Initialize a temporary git repository inside it
+          git init
+          
+          # 3. Explicitly checkout a 'main' branch (resolves default branch gotchas)
+          git checkout -b main
+          
+          # 4. Configure git signatures
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          
+          # 5. Add and commit all backend files
+          git add .
+          git commit -m "deploy: sync to Hugging Face Spaces via GitHub Actions"
+          
+          # 6. Force push the isolated backend state directly to Hugging Face Spaces
+          git push --force https://intrainmode:$HF_TOKEN@huggingface.co/spaces/intrainmode/briefly-ai-api main
