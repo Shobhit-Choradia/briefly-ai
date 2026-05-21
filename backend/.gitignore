@@ -1,0 +1,21 @@
+# Python Virtual Environment
+venv/
+
+# Python Cache & Compiled Files
+__pycache__
+
+
+# Local Environment Variables & Configurations
+.env
+.env.local
+.env.*.local
+
+# Editor Specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Specific
+.DS_Store
+Thumbs.db
