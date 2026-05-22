@@ -31,7 +31,9 @@ const EXAMPLES = [
   }
 ];
 
-const BASE_URL = "https://intrainmode-briefly-ai-api.hf.space";
+const BASE_URL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+  ? "http://localhost:8000"
+  : "https://intrainmode-briefly-ai-api.hf.space";
 
 function App ()
 {
@@ -45,12 +47,58 @@ function App ()
   const [ error, setError ] = useState( "" );
   const [ backendStatus, setBackendStatus ] = useState( "checking" ); // "checking", "online", "offline"
 
+  // Tokenization states for ChatGPT-style colorized tokens
+  const [ activeTab, setActiveTab ] = useState( "editor" ); // "editor" or "tokenizer"
+  const [ tokenCount, setTokenCount ] = useState( 0 );
+  const [ tokensList, setTokensList ] = useState( [] );
+  const [ isTokenizing, setIsTokenizing ] = useState( false );
+  const [ hoveredToken, setHoveredToken ] = useState( null );
+
   // Quick stats computed on the fly
-  const WORD_LIMIT = 800;
   const charCount = inputText.length;
   const wordCount = inputText.trim() === "" ? 0 : inputText.trim().split( /\s+/ ).length;
   const estReadTime = Math.ceil( wordCount / 200 ); // 200 WPM average
-  const isTooLong = wordCount > WORD_LIMIT;
+  const isTooLong = tokenCount > 1024;
+
+  // Debounce input to query tokenizer API
+  useEffect( () =>
+  {
+    if ( !inputText.trim() )
+    {
+      setTokenCount( 0 );
+      setTokensList( [] );
+      return;
+    }
+
+    const delayDebounceFn = setTimeout( async () =>
+    {
+      setIsTokenizing( true );
+      try
+      {
+        const response = await fetch( `${ BASE_URL }/api/tokenize`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify( { text: inputText } )
+        } );
+        if ( response.ok )
+        {
+          const data = await response.json();
+          setTokenCount( data.token_count );
+          setTokensList( data.tokens );
+        }
+      } catch ( err )
+      {
+        console.error( "Tokenization API failed:", err );
+      } finally
+      {
+        setIsTokenizing( false );
+      }
+    }, 350 ); // 350ms debounce
+
+    return () => clearTimeout( delayDebounceFn );
+  }, [ inputText ] );
 
   // Check backend health on load
   useEffect( () =>
@@ -82,9 +130,9 @@ function App ()
   const handleSummarize = async ( e ) =>
   {
     e.preventDefault();
-    if ( wordCount < 10 )
+    if ( tokenCount < 10 )
     {
-      setError( "Please input at least 10 words for a meaningful summary." );
+      setError( "Please input at least 10 tokens for a meaningful summary." );
       return;
     }
 
@@ -140,9 +188,9 @@ function App ()
   const handleSummarizeDetailed = async ( e ) =>
   {
     e.preventDefault();
-    if ( wordCount < 10 )
+    if ( tokenCount < 10 )
     {
-      setError( "Please input at least 10 words for a meaningful summary." );
+      setError( "Please input at least 10 tokens for a meaningful summary." );
       return;
     }
 
@@ -251,116 +299,199 @@ function App ()
       <div className="dashboard-grid">
         {/* Input Control Section */}
         <div className="glass-card">
-          <div className="section-title">
-            <FileText size={20} />
-            <h2>Source Text</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div className="section-title" style={{ marginBottom: 0 }}>
+              <FileText size={20} />
+              <h2>Source Text</h2>
+            </div>
+            
+            {/* Tabs Selector */}
+            <div className="tabs-header">
+              <button 
+                className={`tab-btn ${activeTab === 'editor' ? 'active' : ''}`}
+                onClick={() => setActiveTab('editor')}
+                type="button"
+              >
+                <FileText size={14} />
+                Editor
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'tokenizer' ? 'active' : ''}`}
+                onClick={() => setActiveTab('tokenizer')}
+                type="button"
+              >
+                <Sparkles size={14} />
+                Token Visualizer
+              </button>
+            </div>
           </div>
 
-          <div className="textarea-container">
-            <textarea
-              placeholder="Paste your long article or document here (minimum 10 words)..."
-              value={inputText}
-              onChange={( e ) =>
-              {
-                setInputText( e.target.value );
-                if ( error ) setError( "" );
-              }}
-              style={{
-                borderColor: isTooLong ? '#ef4444' : '',
-                boxShadow: isTooLong ? '0 0 15px -3px rgba(239, 68, 68, 0.25)' : ''
-              }}
-            />
-            <div className="textarea-stats">
-              <span style={{
-                color: isTooLong ? '#f87171' : 'var(--text-muted)',
-                fontWeight: isTooLong ? '700' : '500'
-              }}>
-                {wordCount} / {WORD_LIMIT} words
-              </span>
-              <span>{charCount} characters</span>
-              {wordCount > 0 && <span>~{estReadTime} min read</span>}
-            </div>
-            {isTooLong && (
-              <div className="error-banner" style={{ marginTop: '1rem', marginBottom: 0, padding: '0.75rem 1.25rem', borderRadius: '12px' }}>
-                <AlertTriangle size={16} />
-                <div style={{ fontSize: '0.85rem' }}>
-                  Text exceeds maximum length of 800 words. Please shorten your input to preserve summary completeness.
+          {activeTab === 'editor' ? (
+            <>
+              <div className="textarea-container">
+                <textarea
+                  placeholder="Paste your long article or document here (minimum 10 tokens)..."
+                  value={inputText}
+                  onChange={( e ) =>
+                  {
+                    setInputText( e.target.value );
+                    if ( error ) setError( "" );
+                  }}
+                  style={{
+                    borderColor: isTooLong ? '#ef4444' : '',
+                    boxShadow: isTooLong ? '0 0 15px -3px rgba(239, 68, 68, 0.25)' : ''
+                  }}
+                />
+                <div className="textarea-stats">
+                  <span style={{
+                    color: isTooLong ? '#f87171' : 'var(--text-muted)',
+                    fontWeight: isTooLong ? '700' : '500'
+                  }}>
+                    {wordCount} words | {tokenCount} / 1024 tokens
+                  </span>
+                  <span>{charCount} characters</span>
+                  {wordCount > 0 && <span>~{estReadTime} min read</span>}
+                </div>
+                {isTooLong && (
+                  <div className="error-banner" style={{ marginTop: '1rem', marginBottom: 0, padding: '0.75rem 1.25rem', borderRadius: '12px' }}>
+                    <AlertTriangle size={16} />
+                    <div style={{ fontSize: '0.85rem' }}>
+                      Text exceeds maximum limit of 1024 tokens. Please shorten your input to preserve summary completeness.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Examples Section */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Load Example Passage:
+                </span>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {EXAMPLES.map( ( example, idx ) => (
+                    <button
+                      key={idx}
+                      onClick={() => loadExample( example.text )}
+                      className="action-btn"
+                      type="button"
+                    >
+                      <BookOpen size={13} />
+                      {example.title}
+                    </button>
+                  ) )}
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Quick Examples Section */}
-          <div style={{ marginBottom: '1.5rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Load Example Passage:
-            </span>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {EXAMPLES.map( ( example, idx ) => (
-                <button
-                  key={idx}
-                  onClick={() => loadExample( example.text )}
-                  className="action-btn"
-                  type="button"
-                >
-                  <BookOpen size={13} />
-                  {example.title}
-                </button>
-              ) )}
-            </div>
-          </div>
+              {/* Configuration Settings */}
+              <div className="controls-card">
+                <div className="section-title" style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>
+                  <Sliders size={18} />
+                  <h3>Summarization Limits</h3>
+                </div>
 
-          {/* Configuration Settings */}
-          <div className="controls-card">
-            <div className="section-title" style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>
-              <Sliders size={18} />
-              <h3>Summarization Limits</h3>
-            </div>
+                <div className="slider-group">
+                  <div className="slider-label">
+                    <span>Minimum Summary Length</span>
+                    <span className="value">{minLength} tokens</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max="150"
+                    value={minLength}
+                    onChange={( e ) =>
+                    {
+                      const val = parseInt( e.target.value );
+                      setMinLength( val );
+                      if ( val >= maxLength )
+                      {
+                        setMaxLength( val + 10 );
+                      }
+                    }}
+                  />
+                </div>
 
-            <div className="slider-group">
-              <div className="slider-label">
-                <span>Minimum Summary Length</span>
-                <span className="value">{minLength} words</span>
+                <div className="slider-group">
+                  <div className="slider-label">
+                    <span>Maximum Summary Length</span>
+                    <span className="value">{maxLength} tokens</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="20"
+                    max="400"
+                    value={maxLength}
+                    onChange={( e ) =>
+                    {
+                      const val = parseInt( e.target.value );
+                      setMaxLength( val );
+                      if ( val <= minLength )
+                      {
+                        setMinLength( Math.max( 5, val - 10 ) );
+                      }
+                    }}
+                  />
+                </div>
               </div>
-              <input
-                type="range"
-                min="5"
-                max="150"
-                value={minLength}
-                onChange={( e ) =>
-                {
-                  const val = parseInt( e.target.value );
-                  setMinLength( val );
-                  if ( val >= maxLength )
-                  {
-                    setMaxLength( val + 10 );
-                  }
-                }}
-              />
-            </div>
-
-            <div className="slider-group">
-              <div className="slider-label">
-                <span>Maximum Summary Length</span>
-                <span className="value">{maxLength} words</span>
+            </>
+          ) : (
+            <>
+              {/* Tokenizer tab visualization */}
+              <div className="token-container">
+                {isTokenizing && tokensList.length === 0 ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="spinner" style={{ width: '40px', height: '40px' }}></div>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Analyzing tokens...</span>
+                  </div>
+                ) : tokensList.length > 0 ? (
+                  tokensList.map( ( token, idx ) => (
+                    <span
+                      key={idx}
+                      className={`token-span token-c${token.color_index} ${hoveredToken?.index === idx ? 'hovered' : ''}`}
+                      onMouseEnter={() => setHoveredToken( { ...token, index: idx } )}
+                      onMouseLeave={() => setHoveredToken( null )}
+                    >
+                      {token.text}
+                    </span>
+                  ) )
+                ) : (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', marginTop: '6rem' }}>
+                    No tokens found. Start typing in the Editor tab to visualize tokens here!
+                  </div>
+                )}
               </div>
-              <input
-                type="range"
-                min="20"
-                max="400"
-                value={maxLength}
-                onChange={( e ) =>
-                {
-                  const val = parseInt( e.target.value );
-                  setMaxLength( val );
-                  if ( val <= minLength )
-                  {
-                    setMinLength( Math.max( 5, val - 10 ) );
-                  }
-                }}
-              />
-            </div>
-          </div>
+
+              {/* Hover inspector status bar */}
+              <div className="token-inspector">
+                {hoveredToken ? (
+                  <>
+                    <div>
+                      <span className="token-inspector-label">Token Text:</span>{" "}
+                      <span className="token-inspector-value highlight" style={{ whiteSpace: 'pre' }}>
+                        {hoveredToken.text === "\n" ? "\\n (Newline)" : hoveredToken.text === " " ? "(Space)" : hoveredToken.text}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="token-inspector-label">Token ID:</span>{" "}
+                      <span className="token-inspector-value">{hoveredToken.id}</span>
+                    </div>
+                    <div>
+                      <span className="token-inspector-label">Index:</span>{" "}
+                      <span className="token-inspector-value">{hoveredToken.index}</span>
+                    </div>
+                  </>
+                ) : (
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    Hover over any token block above to inspect its metadata.
+                  </span>
+                )}
+              </div>
+
+              <div style={{ marginTop: '1rem', marginBottom: '1.5rem', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                💡 <strong>About BART Tokenization:</strong> The DistilBART model partitions natural language into "tokens" (sub-words or full words). A single word often spans multiple tokens. The maximum API capacity is strictly <strong>1024 tokens</strong>.
+              </div>
+            </>
+          )}
 
           <div style={{ display: 'flex', gap: '1rem' }}>
             {inputText && (
@@ -370,7 +501,7 @@ function App ()
             )}
             <button
               onClick={handleSummarize}
-              disabled={isLoading || wordCount < 10 || isTooLong || backendStatus !== 'online'}
+              disabled={isLoading || tokenCount < 10 || isTooLong || backendStatus !== 'online'}
               className="btn-primary"
               style={{ flex: 1 }}
             >
@@ -379,7 +510,7 @@ function App ()
             </button>
             <button
               onClick={handleSummarizeDetailed}
-              disabled={isLoading || wordCount < 10 || isTooLong || backendStatus !== 'online'}
+              disabled={isLoading || tokenCount < 10 || isTooLong || backendStatus !== 'online'}
               className="btn-primary"
               style={{ flex: 1 }}
             >

@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from pydantic import BaseModel, Field
 from transformers import pipeline
 from typing import List
@@ -58,7 +59,9 @@ app = FastAPI(
     title="Enhanced Text Analysis API",
     description="FastAPI text engine featuring Summarization, NER, Tone Analysis, and Keyphrase Extraction.",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None
 )
 
 app.add_middleware(
@@ -69,7 +72,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    return get_swagger_ui_html(
+        openapi_url="openapi.json",
+        title=app.title + " - Swagger UI",
+        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        swagger_js_url="https://fastly.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+        swagger_css_url="https://fastly.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
+    )
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_html():
+    return get_redoc_html(
+        openapi_url="openapi.json",
+        title=app.title + " - ReDoc",
+        redoc_js_url="https://fastly.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js",
+    )
+
 # --- REQUEST / RESPONSE SCHEMAS ---
+
+class TokenizeRequest(BaseModel):
+    text: str = Field(..., description="The text to tokenize.")
+
+class TokenInfo(BaseModel):
+    id: int
+    text: str
+    color_index: int
+
+class TokenizeResponse(BaseModel):
+    tokens: List[TokenInfo]
+    token_count: int
 
 class SummarizeRequest(BaseModel):
     text: str = Field(..., min_length=10, description="The text to be processed.")
@@ -138,6 +171,35 @@ def health_check():
         "model": SUMMARIZATION_MODEL_NAME
     }
 
+@app.post("/api/tokenize", response_model=TokenizeResponse)
+async def tokenize_text(request: TokenizeRequest):
+    global text_summarizer
+    if text_summarizer is None:
+        raise HTTPException(status_code=503, detail="Model pipeline is currently unavailable.")
+    
+    try:
+        if not request.text.strip():
+            return TokenizeResponse(tokens=[], token_count=0)
+            
+        input_ids = text_summarizer.tokenizer.encode(request.text, add_special_tokens=False)
+        
+        tokens_list = []
+        for idx, token_id in enumerate(input_ids):
+            token_text = text_summarizer.tokenizer.decode([token_id])
+            tokens_list.append(TokenInfo(
+                id=token_id,
+                text=token_text,
+                color_index=idx % 5
+            ))
+            
+        return TokenizeResponse(
+            tokens=tokens_list,
+            token_count=len(input_ids)
+        )
+    except Exception as e:
+        logger.error(f"Tokenization failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Tokenization failed: {str(e)}")
+
 @app.post("/api/summarize", response_model=SummarizeResponse)
 async def summarize_text(request: SummarizeRequest):
     global text_summarizer
@@ -148,24 +210,32 @@ async def summarize_text(request: SummarizeRequest):
         raise HTTPException(status_code=400, detail="max_length must be strictly greater than min_length.")
 
     words_in_input = len(request.text.split())
-    if words_in_input < 10:
-        raise HTTPException(status_code=400, detail="Input text is too short. Please provide at least 10 words.")
-
+    
+    # Calculate token count first
     try:
         tokens_count = len(text_summarizer.tokenizer.encode(request.text))
-        if tokens_count > 1024:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Input text is too long ({tokens_count} tokens). Please shorten text to under 1024 tokens."
-            )
     except Exception as e:
-        if isinstance(e, HTTPException): raise e
-        logger.warning(f"Failed to count tokens: {str(e)}")
+        logger.error(f"Failed to count tokens: {str(e)}")
+        tokens_count = int(words_in_input * 1.3) # Fallback estimation
+
+    if tokens_count < 10:
+        raise HTTPException(status_code=400, detail="Input text is too short. Please provide at least 10 tokens.")
+
+    if tokens_count > 1024:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Input text is too long ({tokens_count} tokens). Please shorten text to under 1024 tokens."
+        )
 
     start_time = time.time()
     try:
-        adjusted_max_length = min(request.max_length, words_in_input)
+        # Clamp based on token count
+        adjusted_max_length = min(request.max_length, tokens_count)
         adjusted_min_length = min(request.min_length, max(5, adjusted_max_length - 5))
+        
+        # Absolute safeguard for short inputs to prevent Hugging Face errors
+        if adjusted_max_length <= adjusted_min_length:
+            adjusted_min_length = max(1, adjusted_max_length - 1)
 
         result = text_summarizer(
             request.text, 

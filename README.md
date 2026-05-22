@@ -4,6 +4,9 @@ This is a simple learning project designed to test and understand how to deploy 
 1. **Containerized Backend Deployment**: Running a FastAPI NLP engine inside a Docker container on a **Hugging Face Space**.
 2. **Decoupled Frontend Deployment**: Deploying a static React application separately (e.g. to Vercel or Netlify) that communicates with the Hugging Face Space API.
 
+# Website link : https://briefly-ai-ochre.vercel.app/
+# Backend Deployement Info: https://huggingface.co/spaces/intrainmode/briefly-ai-api/docs 
+
 ---
 
 ## Project Purpose & Architecture 🏗️
